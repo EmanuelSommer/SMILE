@@ -1,0 +1,18 @@
+training: # totalling 6x3x3 = 54 experiments for each SGMCMC sampler
+  sampler:
+    epoch_wise_sampling:
+     - false
+     - true
+    step_size:
+     - 0.01
+     - 0.001
+     - 0.0001
+data:
+  path:
+   - 'data/airfoil.data'
+   - 'data/bikesharing.data'
+   - 'data/energy.data'
+rng:
+ - 1
+ - 2
+ - 3

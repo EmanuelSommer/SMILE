@@ -1,0 +1,9 @@
+training:
+  sampler:
+    smile_tuning:
+      - {reset_prob: 0.98, adaption_prob: 0.1, adaption_strength: 0.02, smoothing_factor: 0.01}
+      - {reset_prob: 0.95, adaption_prob: 0.1, adaption_strength: 0.02, smoothing_factor: 0.01}
+      - {reset_prob: 0.99, adaption_prob: 0.1, adaption_strength: 0.02, smoothing_factor: 0.01}
+      - {reset_prob: 0.9999999999, adaption_prob: 0.1, adaption_strength: 0.02, smoothing_factor: 0.01} # effectively no resets
+      - {reset_prob: 0.9, adaption_prob: 0.1, adaption_strength: 0.02, smoothing_factor: 0.01}
+experiment_name: ['smiletcifar_ablations_reset']

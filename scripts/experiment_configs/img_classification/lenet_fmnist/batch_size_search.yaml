@@ -1,0 +1,14 @@
+training:
+  sampler:
+    batch_size:
+     - 128
+     - 512
+     - 1024
+    step_size:
+     - 0.01
+     - 0.001
+     - 0.0001
+rng:
+  - 1
+  - 2
+  - 3

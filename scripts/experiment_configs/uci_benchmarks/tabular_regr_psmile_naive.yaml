@@ -1,0 +1,69 @@
+saving_dir: 'results/smile_tabular_mean/'
+experiment_name: 'tabular_meanreg_psmile_naive'
+data:
+  path: 'data/bikesharing.data'
+  source: 'local'
+  data_type: 'tabular'
+  task: 'mean_regr'
+  target_column: null
+  target_len: 1
+  features: null
+  datapoint_limit: null
+  normalize: true
+  train_split: 0.7
+  valid_split: 0.1
+  test_split: 0.2
+model:
+  model: FCN
+  hidden_structure:
+   - 16
+   - 16
+   - 16
+   - 1
+  activation: 'relu'
+  use_bias: true
+training:
+  warmstart:
+    include: true
+    optimizer_config:
+      name: 'adamw'
+      parameters: {'learning_rate': 0.01, 'weight_decay': 0.005}
+    warmstart_exp_dir: null
+    max_epochs: 200
+    batch_size: 64
+    patience: 10
+  sampler:
+    name: 'noisysmile'
+    epoch_wise_sampling: false
+    batch_size: 256
+    warmup_steps: 50000
+    n_chains: 10
+    n_samples: 10000
+    use_warmup_as_init: true
+    n_thinning: 10
+    step_size: 0.001
+    n_integration_steps: 1
+    keep_warmup: false
+    smile_tuning:
+      reset_prob: 1.0
+      adaption_prob: 0.0
+      adaption_strength: 0.0
+      smoothing_factor: 0.01
+    prior_config:
+      name: 'StandardNormal'
+      parameters: {}
+rng: 1
+logging: true
+logging_level: INFO
+evaluations:
+  - PredPerf
+  - Lppd
+evaluation_args:
+  phases: [ensemble_initialization, sampling]
+  pred_sampling_factor: 1
+  samples_batch_size: 100
+  kappa: 0.0
+  nominal_coverages:
+   - 0.8
+   - 0.9
+   - 0.95
