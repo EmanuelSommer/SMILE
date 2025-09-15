@@ -5,7 +5,7 @@ Code for the ICLR 2026 submission: **Can Microcanonical Langevin Dynamics be Mad
 Below you can find a qualitative contextualization of the newly proposed and explored methods (in blue) relative to prior work (in grey).
 
 <p align="center">
-    <img src="overviewsmile.png" alt="Flowchart" style="width: 50%;">
+    <img src="overviewsmile.png" alt="Flowchart" style="width: 66%;">
 </p>
 
 
