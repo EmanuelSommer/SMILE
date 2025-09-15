@@ -1,6 +1,6 @@
 # Stochastic Microcanonical Langevin Ensembles (SMILE) 😃
 
-Code for the ICLR 2026 submission: **On the Foundations, Pitfalls, and Practical Remedies of Stochastic Microcanonical Langevin Dynamics**
+Code for the ICLR 2026 submission: **Can Microcanonical Langevin Dynamics be Made Stochastic?**
 
 Below you can find a qualitative contextualization of the newly proposed and explored methods (in blue) relative to prior work (in grey).
 
@@ -33,6 +33,8 @@ poetry install --all-extras
 ├── pyproject.toml           Poetry configuration file
 └── poetry.lock              Poetry generated file for managing dependencies
 ```
+
+> **Note:** This codebase is partly an adaptation/extension of the following codebases: [MILE](https://github.com/EmanuelSommer/MILE), [SAI](https://github.com/EmanuelSommer/sampled-approx-posteriors), and the [dataserious](https://github.com/Noza23/dataserious).
 
 ## Usage
 
@@ -67,4 +69,3 @@ After executing experiments, all results will be automatically stored in a dedic
 - Evaluation metrics and outputs in the `eval/` subdirectory
 - Detailed training logs
 
-> **Note:** Much of the code is based on/an extension of the [MILE codebase](https://github.com/EmanuelSommer/MILE) (Sommer et al., 2025).
