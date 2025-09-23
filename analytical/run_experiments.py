@@ -83,7 +83,7 @@ def run(cfg: Config):
     total_runs = len(step_sizes_to_run) * len(n_samples_to_run)
     current_run_count = 0
 
-    base_results_dir = "/pscratch/sd/d/dkn16/constant_reg_results/"
+    base_results_dir = "results"
     algorithm_results_dir = os.path.join(base_results_dir, cfg.algorithm)
     # sanitize likelihood model for folder name
     llh_folder = re.sub(r"[^A-Za-z0-9._-]", "_", str(cfg.likelihood_model))

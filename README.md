@@ -40,7 +40,7 @@ poetry install --all-extras
 
 ## Usage
 
-The individual experiments can be easily exectuted using the `src` module. To see all available options, run:
+The **Bayesian Neural Network experiments** can be easily exectuted using the `src` module. To see all available options, run:
 
 ```bash
 python -m src -h
@@ -61,7 +61,7 @@ python -m src \
     -s scripts/experiment_configs/uci_benchmarks/uci_search_config.yaml
 ```
 
-To run the analytical benchmark, use the following command:
+To run the **analytical benchmark**, use the following command (and make sure to adjust the absolute path to your local blackjax installation in the config file):
 ```bash
 python analytical/run_analytical.py --config scripts/analytical/pmclmc/icg_correlated.json
 ```
