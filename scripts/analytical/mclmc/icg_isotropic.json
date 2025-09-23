@@ -5,7 +5,7 @@
   "min_n_samples": 100,
   "max_n_samples": 1000000,
   "min_step_size": 1e-3,
-  "max_step_size": 1e0,
+  "max_step_size": 1e-1,
   "noise_scale": 1.0,
   "noise_type": "isotropic",
   "L": 1000,
