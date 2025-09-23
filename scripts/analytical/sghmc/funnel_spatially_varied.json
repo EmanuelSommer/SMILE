@@ -1,0 +1,15 @@
+{
+  "algorithm": "sghmc",
+  "likelihood_model": "funnel",
+  "batch_size": 256,
+  "min_n_samples": 100,
+  "max_n_samples": 1000000,
+  "min_step_size": 5e-4,
+  "max_step_size": 5e-2,
+  "noise_scale": 1.0,
+  "noise_type": "spatially_varied",
+  "L": 1,
+  "seed": 42,
+  "use_preconditioning": false,
+  "blackjax_path": "../blackjax/"
+}

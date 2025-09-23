@@ -1,0 +1,15 @@
+{
+  "algorithm": "mclmc",
+  "likelihood_model": "ill_condition_Gaussian_precond",
+  "batch_size": 256,
+  "min_n_samples": 100,
+  "max_n_samples": 1000000,
+  "min_step_size": 1e-5,
+  "max_step_size": 1e-3,
+  "noise_scale":1.0,
+  "noise_type": "correlated",
+  "L": 1000,
+  "seed": 42,
+  "use_preconditioning": false,
+  "blackjax_path": "../blackjax/"
+}

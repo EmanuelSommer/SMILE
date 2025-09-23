@@ -27,8 +27,10 @@ poetry install --all-extras
 ├── data/                    Data folder
 ├── scripts/
 │   ├── experiment_configs/  Folder with folders of detailed experiment configuration files
-│   └── experiment_utils/    Folder with a CLI tool making it easy to aggregate results across multiple experiments
+│   ├── experiment_utils/    Folder with a CLI tool making it easy to aggregate results across multiple experiments
+│   └── analytical/          Folder with folders of detailed analytical benchmark configuration files
 ├── src/                     Source code of the project
+├── analytical/              Analytical benchmark source code
 ├── README.md                This file
 ├── pyproject.toml           Poetry configuration file
 └── poetry.lock              Poetry generated file for managing dependencies
@@ -59,6 +61,11 @@ python -m src \
     -s scripts/experiment_configs/uci_benchmarks/uci_search_config.yaml
 ```
 
+To run the analytical benchmark, use the following command:
+```bash
+python analytical/run_analytical.py --config scripts/analytical/pmclmc/icg_correlated.json
+```
+
 ## Results Storage
 
 After executing experiments, all results will be automatically stored in a dedicated subfolder within the (automatically generated) `results/` directory. Each experiment's output includes:
@@ -69,3 +76,4 @@ After executing experiments, all results will be automatically stored in a dedic
 - Evaluation metrics and outputs in the `eval/` subdirectory
 - Detailed training logs
 
+The bias for analytical examples are reported in log file, within the `log/` folder.
