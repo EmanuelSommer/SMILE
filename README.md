@@ -1,6 +1,6 @@
 # Stochastic Microcanonical Langevin Ensembles (SMILE) 😃
 
-Code for the ICLR 2026 submission: **Can Microcanonical Langevin Dynamics be Made Stochastic?**
+Code for the ICLR 2026 submission: **Can Microcanonical Langevin Dynamics Leverage Mini-Batch Gradient Noise?**
 
 Below you can find a qualitative contextualization of the newly proposed and explored methods (in blue) relative to prior work (in grey).
 
