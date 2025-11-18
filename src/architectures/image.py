@@ -7,6 +7,9 @@ import jax.numpy as jnp
 from flax import linen as nn
 
 import src.config.models.image as cfg
+from src.architectures.components import (
+    Transformer,
+)
 
 
 class FRN(nn.Module):
@@ -281,3 +284,93 @@ class ResNet(nn.Module):
             Output tensor of shape (batch_size, num_classes).
         """
         return self.core(x, train)
+
+
+class ViTCore(nn.Module):
+    """Core implementation of Vision Transformer (Inspired from https://github.com/vballoli/vit-flax)."""
+
+    patch_size: int
+    dim: int
+    depth: int
+    num_heads: int
+    transformer_fc_dim: int
+    classifier_fc_dim: int
+    out_dim: int
+    initializer: Callable = nn.initializers.normal(stddev=1.0)
+
+    @nn.compact
+    def __call__(self, x: jnp.ndarray, train: bool = True) -> jnp.ndarray:
+        """Applies the Vision Transformer to the input tensor.
+        Args:
+            x (jnp.ndarray): Input tensor image, shape (batch, height, width, channels).
+            train (bool): Whether the model is in training mode (for dropout, etc.).
+        """
+        b, h, w, c = x.shape
+
+        # 1. Patch + Position Embedding
+
+        # Patch embedding using a single Conv layer
+        patch_embed = nn.Conv(
+            features=self.dim,
+            kernel_size=(self.patch_size, self.patch_size),
+            strides=(self.patch_size, self.patch_size),
+            name="patch_embedding",
+        )(x)
+
+        # Output of Conv is (batch, num_patches_h, num_patches_w, dim)
+        # We want (batch, num_patches, dim)
+        num_patches = patch_embed.shape[1] * patch_embed.shape[2]
+
+        # Reshape to (batch, num_patches, dim)
+        patch_embed = patch_embed.reshape((b, num_patches, self.dim))
+
+        # CLS token
+        cls_token = self.param("class_tokens", self.initializer, (1, 1, self.dim))
+        cls_token = jnp.tile(cls_token, (b, 1, 1))  # Broadcast to batch size
+
+        # Positional embedding
+        pos_embedding = self.param(
+            "pos_embedding", self.initializer, (1, num_patches + 1, self.dim)
+        )
+
+        # Prepend CLS token and add positional embedding
+        x = jnp.concatenate([cls_token, patch_embed], axis=1)
+        x += pos_embedding
+
+        # 2. Transformer Encoder
+        x = Transformer(
+            depth=self.depth,
+            num_heads=self.num_heads,
+            feed_forward_dim=self.transformer_fc_dim,
+        )(x, train=train)
+
+        # 3. Classifier Head
+        x = x[:, 0]
+
+        x = nn.Dense(features=self.classifier_fc_dim, name="mlp_fc1")(x)
+        x = nn.gelu(x)
+        x = nn.Dense(features=self.out_dim, name="mlp_output")(x)
+
+        return x
+
+
+class ViT(nn.Module):
+    """Vision Transformer (ViT) model."""
+
+    config: cfg.ViTConfig
+
+    def setup(self):
+        """Initialize the ViT core model."""
+        self.core = ViTCore(
+            patch_size=self.config.patch_size,
+            dim=self.config.dim,
+            depth=self.config.depth,
+            num_heads=self.config.num_heads,
+            transformer_fc_dim=self.config.transformer_fc_dim,
+            classifier_fc_dim=self.config.classifier_fc_dim,
+            out_dim=self.config.out_dim,
+        )
+
+    def __call__(self, x: jnp.ndarray, train: bool = True) -> jnp.ndarray:
+        """Forward pass."""
+        return self.core(x, train=train)

@@ -89,3 +89,47 @@ class TokenEmbedding(nn.Module):
             )(pos)
             embed += pos
         return embed
+    
+class TransformerBlock(nn.Module):
+    """A single Transformer block (Pre-Norm)."""
+
+    num_heads: int
+    feed_forward_dim: int
+
+    @nn.compact
+    def __call__(self, x: jnp.ndarray, train: bool = True) -> jnp.ndarray:
+        """Applies one layer of Pre-Norm Self-Attention and MLP."""
+        # Attention Block (Pre-Norm + Residual)
+        x_norm_attn = nn.LayerNorm()(x)
+        attn_out = nn.SelfAttention(num_heads=self.num_heads)(x_norm_attn)
+        x = x + attn_out
+
+        # FFN Block (Pre-Norm + Residual)
+        x_norm_ffn = nn.LayerNorm()(x)
+
+        ffn_out = FullyConnected(
+            hidden_sizes=(self.feed_forward_dim, x.shape[-1]),
+            activation=nn.gelu,
+            last_layer_activation=None,
+        )(x_norm_ffn)
+
+        x = x + ffn_out
+
+        return x
+
+
+class Transformer(nn.Module):
+    """A stack of Transformer blocks."""
+
+    depth: int
+    num_heads: int
+    feed_forward_dim: int
+
+    @nn.compact
+    def __call__(self, x: jnp.ndarray, train: bool = True) -> jnp.ndarray:
+        """Applies residual normalized attention layers to input."""
+        for _ in range(self.depth):
+            x = TransformerBlock(
+                num_heads=self.num_heads, feed_forward_dim=self.feed_forward_dim
+            )(x, train=train)
+        return x

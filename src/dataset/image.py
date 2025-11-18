@@ -1,11 +1,14 @@
 """DataLoader Implementations for Image Data."""
 
+import logging
 import jax
 import jax.numpy as jnp
 
 from src.config.data import DataConfig, DatasetType, Source
 from src.dataset.base import BaseLoader
 from src.types import PRNGKey
+
+logger = logging.getLogger(__name__)
 
 
 class ImageLoader(BaseLoader):
@@ -74,7 +77,9 @@ class ImageLoader(BaseLoader):
     def load_data(self):
         """Load the dataset from different sources."""
         if self.config.source == Source.TORCHVISION:
-            data_x, data_y, test_size = _get_torchvision_data(self._name, self._dir)
+            data_x, data_y, test_size = _get_torchvision_data(
+                self._name, self._dir, self.config.normalize
+            )
             non_test_x, non_test_y = self.shuffle_arrays(
                 data_x[:-test_size], data_y[:-test_size]
             )
@@ -103,10 +108,6 @@ class ImageLoader(BaseLoader):
             data_x = data_x[: self.config.datapoint_limit]
             data_y = data_y[: self.config.datapoint_limit]
 
-            # normalize
-            if self.config.normalize:
-                data_x = data_x / 255.0
-
             if self.config.flatten:
                 data_x = jax.vmap(jnp.ravel)(data_x)
 
@@ -132,79 +133,179 @@ class ImageLoader(BaseLoader):
         return data
 
 
-def _get_torchvision_data(name: str, dir: str) -> tuple[jnp.ndarray, jnp.ndarray, int]:
+def _get_torchvision_data(
+    name: str, dir: str, normalize: bool
+) -> tuple[jnp.ndarray, jnp.ndarray, int]:
     """Get torchvision datasets."""
+    import os
+
+    import numpy as np
+    import torch
     from torchvision import datasets, transforms
+
+    def _build_data_from_iterable(dataset) -> tuple[np.ndarray, np.ndarray]:
+        """Iterate through a torch dataset and stack the results."""
+        logger.info(f"Loading and transforming data for {name}...")
+        data_x_list = []
+        data_y_list = []
+        # Use torch.utils.data.DataLoader for efficient loading
+        loader = torch.utils.data.DataLoader(
+            dataset, batch_size=512, shuffle=False, num_workers=0
+        )
+        for imgs, labels in loader:
+            data_x_list.append(imgs.numpy())  # imgs are (N, C, H, W)
+            data_y_list.append(labels.numpy())
+
+        data_x = np.concatenate(data_x_list, axis=0)
+        data_y = np.concatenate(data_y_list, axis=0)
+        logger.info("...done.")
+        return data_x, data_y
 
     match name:
         case "mnist":
-            d_train = datasets.MNIST(
-                dir, train=True, download=True, transform=transforms.ToTensor()
-            )
-            d_test = datasets.MNIST(
-                dir, train=False, download=True, transform=transforms.ToTensor()
-            )
-        case "fashion_mnist":
-            d_train = datasets.FashionMNIST(
-                dir, train=True, download=True, transform=transforms.ToTensor()
-            )
-            d_test = datasets.FashionMNIST(
-                dir, train=False, download=True, transform=transforms.ToTensor()
-            )
-            # retrieve original test dataset with `test_split: 0.14285`
-        case "cifar10":
-            d_train = datasets.CIFAR10(
-                dir,
-                train=True,
-                download=True,
-                transform=transforms.Compose(
+            if normalize:
+                mnist_transform = transforms.Compose(
                     [
                         transforms.ToTensor(),
-                        # CIFAR10 mean and std from
-                        # https://github.com/kuangliu/pytorch-cifar/issues/19
+                    ]
+                )
+            else:
+                mnist_transform = transforms.Compose(
+                    [
+                        transforms.PILToTensor(),
+                    ]
+                )
+
+            d_train = datasets.MNIST(
+                dir, train=True, download=True, transform=mnist_transform
+            )
+            d_test = datasets.MNIST(
+                dir, train=False, download=True, transform=mnist_transform
+            )
+        case "fashion_mnist":
+            if normalize:
+                fashion_mnist_transform = transforms.Compose(
+                    [
+                        transforms.ToTensor(),
+                    ]
+                )
+            else:
+                fashion_mnist_transform = transforms.Compose(
+                    [
+                        transforms.PILToTensor(),
+                    ]
+                )
+            d_train = datasets.FashionMNIST(
+                dir, train=True, download=True, transform=fashion_mnist_transform
+            )
+            d_test = datasets.FashionMNIST(
+                dir, train=False, download=True, transform=fashion_mnist_transform
+            )
+        case "cifar10":
+            if normalize:
+                cifar10_transform = transforms.Compose(
+                    [
+                        transforms.ToTensor(),
                         transforms.Normalize(
                             (0.4914, 0.4822, 0.4465), (0.247, 0.243, 0.261)
                         ),
                     ]
-                ),
+                )
+            else:
+                cifar10_transform = transforms.Compose(
+                    [
+                        transforms.PILToTensor(),
+                    ]
+                )
+            d_train = datasets.CIFAR10(
+                dir,
+                train=True,
+                download=True,
+                transform=cifar10_transform,
             )
             d_test = datasets.CIFAR10(
                 dir,
                 train=False,
                 download=True,
-                transform=transforms.Compose(
+                transform=cifar10_transform,
+            )
+        case "cifar100":
+            # Using CIFAR-100 stats, similar to CIFAR-10
+            if normalize:
+                cifar100_transform = transforms.Compose(
                     [
                         transforms.ToTensor(),
-                        # CIFAR10 mean and std from
-                        # https://github.com/kuangliu/pytorch-cifar/issues/19
                         transforms.Normalize(
-                            (0.4914, 0.4822, 0.4465), (0.247, 0.243, 0.261)
+                            mean=[0.507, 0.487, 0.441], std=[0.267, 0.256, 0.276]
                         ),
                     ]
-                ),
-            )
-            # retrieve original test dataset with `test_split: 0.16666`
-        case "cifar100":
+                )
+            else:
+                cifar100_transform = transforms.Compose(
+                    [
+                        transforms.PILToTensor(),
+                    ]
+                )
             d_train = datasets.CIFAR100(
-                dir, train=True, download=True, transform=transforms.ToTensor()
+                dir, train=True, download=True, transform=cifar100_transform
             )
             d_test = datasets.CIFAR100(
-                dir, train=False, download=True, transform=transforms.ToTensor()
+                dir, train=False, download=True, transform=cifar100_transform
+            )
+        case "imagenette":
+            IMG_SIZE = (160, 160)
+            if normalize:
+                imagenet_transform = transforms.Compose(
+                    [
+                        transforms.Resize(IMG_SIZE),
+                        transforms.ToTensor(),
+                        transforms.Normalize(
+                            mean=[0.485, 0.456, 0.406],
+                            std=[0.229, 0.224, 0.225],
+                        ),
+                    ]
+                )
+            else:
+                imagenet_transform = transforms.Compose(
+                    [
+                        transforms.Resize(IMG_SIZE),
+                        transforms.ToTensor(),
+                    ]
+                )
+            train_path = os.path.join(dir, "imagenette2", "train")
+            val_path = os.path.join(dir, "imagenette2", "val")
+            download_data = not (
+                os.path.exists(train_path) and os.path.exists(val_path)
+            )
+            if download_data:
+                logger.info(
+                    f"Imagenette data not found in {dir}/imagenette2. Downloading..."
+                )
+
+            d_train = datasets.Imagenette(
+                dir,
+                split="train",
+                download=download_data,
+                transform=imagenet_transform,
+            )
+            d_test = datasets.Imagenette(
+                dir,
+                split="val",
+                download=False,
+                transform=imagenet_transform,
             )
         case _:
             raise NotImplementedError(f"Dataset {name} is not supported.")
 
-    test_size = d_test.data.shape[0]
-    data_x = jnp.concatenate(
-        [jnp.array(d_train.data), jnp.array(d_test.data)],
-        axis=0,
-    )
-    if len(data_x.shape) == 3:
-        data_x = data_x[:, None, ...]
-        data_x = data_x.transpose((0, 2, 3, 1))  # ensure NHWC / NDHWC
+    train_x, train_y = _build_data_from_iterable(d_train)
+    test_x, test_y = _build_data_from_iterable(d_test)
 
-    data_y = jnp.concatenate(
-        [jnp.array(d_train.targets), jnp.array(d_test.targets)],
-        axis=0,
-    )
+    test_size = test_x.shape[0]
+
+    data_x = jnp.concatenate([train_x, test_x], axis=0)  # (N, C, H, W)
+    data_y = jnp.concatenate([train_y, test_y], axis=0)
+
+    # Transpose from (N, C, H, W) to (N, H, W, C) for the rest of the code
+    data_x = data_x.transpose((0, 2, 3, 1))
+
     return data_x, data_y, test_size
