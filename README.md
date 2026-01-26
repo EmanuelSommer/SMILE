@@ -1,6 +1,6 @@
 # Stochastic Microcanonical Langevin Ensembles (SMILE) 😃
 
-Code for the ICLR 2026 submission: **Can Microcanonical Langevin Dynamics Leverage Mini-Batch Gradient Noise?**
+Code for the ICML 2026 submission: **Can Microcanonical Langevin Dynamics Leverage Mini-Batch Gradient Noise?**
 
 Below you can find a qualitative contextualization of the newly proposed and explored methods (in blue) relative to prior work (in grey).
 
@@ -36,7 +36,7 @@ poetry install --all-extras
 └── poetry.lock              Poetry generated file for managing dependencies
 ```
 
-> **Note:** This codebase is partly an adaptation/extension of the following codebases: [MILE](https://github.com/EmanuelSommer/MILE), [SAI](https://github.com/EmanuelSommer/sampled-approx-posteriors), and the [dataserious](https://github.com/Noza23/dataserious).
+> **Note:** This codebase is partly an adaptation/extension of the following codebases: [MILE](https://github.com/EmanuelSommer/MILE), [SAI](https://github.com/EmanuelSommer/sampled-approx-posteriors), and [dataserious](https://github.com/Noza23/dataserious).
 
 ## Usage
 
