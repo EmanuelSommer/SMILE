@@ -42,10 +42,11 @@ def cosine_annealing_scheduler(
 
     def step_fn(step_id: int) -> SchedulerState:
         multiplier = (step_id % cycle_length) / cycle_length
-        cos_out = jnp.cos(jnp.pi * multiplier) + 1
-        lr = jnp.minimum(0.5 * init_lr * cos_out, target_lr)
+        lr = target_lr + 0.5 * (init_lr - target_lr) * (
+            jnp.cos(jnp.pi * multiplier) + 1
+        )
         return SchedulerState(
-            lr=lr.item(), explore=(multiplier < exploration_ratio) or False
+            lr=float(lr), explore=(multiplier < exploration_ratio) or False
         )
 
     return step_fn
@@ -72,9 +73,9 @@ def linear_decay_scheduler(
     assert target_lr <= init_lr, "target_lr should be less than or equal to init_lr"
 
     def step_fn(step_id: int) -> SchedulerState:
-        lr = jnp.minimum(init_lr * (1 - step_id / n_steps), target_lr)
+        lr = init_lr + (target_lr - init_lr) * (step_id / n_steps)
         return SchedulerState(
-            lr=lr.item(), explore=(step_id < exploration_ratio * n_steps)
+            lr=float(lr), explore=(step_id < exploration_ratio * n_steps)
         )
 
     return step_fn
