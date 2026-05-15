@@ -1,6 +1,6 @@
 # Stochastic Microcanonical Langevin Ensembles (SMILE) 😃
 
-Code for the ICML 2026 submission: **Can Microcanonical Langevin Dynamics Leverage Mini-Batch Gradient Noise?**
+Code for the ICML 2026 paper: [**Can Microcanonical Langevin Dynamics Leverage Mini-Batch Gradient Noise?**](https://arxiv.org/abs/2602.06500)
 
 Below you can find a qualitative contextualization of the newly proposed and explored methods (in blue) relative to prior work (in grey).
 
