@@ -39,12 +39,12 @@ training:
     name: 'sgld'
     epoch_wise_sampling: false
     batch_size: 512
-    warmup_steps: 5000
+    warmup_steps: 5000 # not used for SGLD
     n_chains: 8
     n_samples: 15000
     use_warmup_as_init: true
     n_thinning: 150
-    step_size: 0.001
+    step_size: 0.001 # not used see scheduler below
     mdecay: 0.05
     n_integration_steps: 1
     momentum_resampling: 0.0
@@ -53,8 +53,8 @@ training:
     scheduler_config_samp:
       name: Cosine
       exploration: 0.33
-      init_step_size: 0.00005 # ablated 0.0005 and 0.005 as well
-      target_step_size: 0.000001
+      init_step_size: 0.00001 # ablated 0.005 to 1e-06, 1e-05 to 5e-09, 1e-06 to 5e-09, 1e-07 to 5e-09, 5e-04 to 1e-06, 5e-05 to 1e-06
+      target_step_size: 0.000000005
       n_cycles: 4
     prior_config:
       name: 'Normal'
