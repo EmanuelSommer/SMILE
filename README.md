@@ -77,3 +77,15 @@ After executing experiments, all results will be automatically stored in a dedic
 - Detailed training logs
 
 The bias for analytical examples are reported in log file, within the `log/` folder.
+
+## Citation
+
+```bibtex
+@inproceedings{sommer2026can,
+  title  = {{Can Microcanonical Langevin Dynamics Leverage Mini-Batch Gradient Noise?}},
+  author = {Emanuel Sommer and Kangning Diao and Jakob Robnik and Uroš Seljak and David R{\"u}gamer},
+  booktitle={Forty-third International Conference on Machine Learning},
+  year={2026},
+  url={https://openreview.net/forum?id=D2evvc90tF}
+}
+```
