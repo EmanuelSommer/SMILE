@@ -40,6 +40,15 @@ class Config:
     random_rotation: Optional[bool] = None
     center: Optional[bool] = None
     use_preconditioning: bool = False
+    # Explicit non-Gaussian gradient-noise injection (see samplers._add_gradient_noise).
+    # When grad_noise_type is set, mini-batch sampling is bypassed and a fresh
+    # noise vector is drawn each step from the requested distribution.
+    grad_noise_type: Optional[str] = None              # "laplacian" | "student_t" | "lognormal" | None
+    grad_noise_scale: float = 16.0                     # per-component std (before structure rescale)
+    grad_noise_df: float = 5.0                         # Student-t df, or lognormal sigma
+    grad_noise_structure: str = "isotropic"            # "isotropic" | "anisotropic" | "correlated" | "spatially_varied"
+    grad_noise_spatial_dim: int = 2
+    grad_noise_spatial_scale: float = 6.5
 
 
 def run(cfg: Config):
@@ -50,6 +59,17 @@ def run(cfg: Config):
     DIM = 10
     N_TOTAL = 409600
     CONSTANT_VAL = 0.0
+
+    # Precompute gradient-noise structure arrays (traced JAX arrays; no recompilation).
+    # `grad_conds` matches the ill-conditioned Gaussian condition spectrum; `grad_Q_mat`
+    # is a fixed random rotation independent of the data rotation seed.
+    _grad_conds = jnp.array(np.logspace(
+        -0.5 * np.log10(cfg.condition_numbers),
+        0.5 * np.log10(cfg.condition_numbers),
+        DIM,
+    ))
+    _rot_rng = np.random.default_rng(43)
+    _grad_Q_mat = jnp.array(np.linalg.qr(_rot_rng.standard_normal((DIM, DIM)))[0])
 
     rng_key_master = jax.random.key(cfg.seed)
     rng_key_data_gen_init, rng_key_runs_master = jax.random.split(rng_key_master)
@@ -90,6 +110,31 @@ def run(cfg: Config):
     model_results_dir = os.path.join(algorithm_results_dir, llh_folder)
     os.makedirs(model_results_dir, exist_ok=True)
 
+    # When explicit gradient noise is requested, pre-bake a full-dataset logp so
+    # the scan body can skip mini-batch subsampling entirely. This isolates the
+    # injected non-Gaussian noise from any residual CLT-suppressed mini-batch noise.
+    _noise_type  = cfg.grad_noise_type
+    _noise_scale = cfg.grad_noise_scale
+    _noise_df    = cfg.grad_noise_df
+    if _noise_type is not None and _noise_type != "none":
+        _, make_batched_log_p_full, _, _ = get_likelihood_factories(
+            cfg.likelihood_model,
+            Condition_numbers=cfg.condition_numbers,
+            N_total=N_TOTAL,
+            dim_val=DIM,
+            constant_val=CONSTANT_VAL,
+            batch_size=None,
+            seed=0,
+            noise_type="none",
+            noise_scale=cfg.noise_scale,
+            random_rotation=cfg.random_rotation,
+            center=cfg.center,
+        )
+        const_logp_fn = make_batched_log_p_full(y_data_jnp, N_TOTAL, N_TOTAL)
+        print(f"Using full-dataset logp (grad_noise_type={_noise_type}); mini-batch sampling disabled.")
+    else:
+        const_logp_fn = None
+
     for current_n_samples_val in n_samples_to_run:
         for current_step_size_val in step_sizes_to_run:
             current_run_count += 1
@@ -110,6 +155,15 @@ def run(cfg: Config):
                     current_step_size=current_step_size_val,
                     make_batched_log_p_fn=make_batched_log_p,
                     use_preconditioning=cfg.use_preconditioning,
+                    grad_noise_type=_noise_type,
+                    grad_noise_scale=_noise_scale,
+                    grad_noise_df=_noise_df,
+                    const_logp_fn=const_logp_fn,
+                    grad_noise_structure=cfg.grad_noise_structure,
+                    grad_conds=_grad_conds,
+                    grad_Q_mat=_grad_Q_mat,
+                    grad_noise_spatial_dim=cfg.grad_noise_spatial_dim,
+                    grad_noise_spatial_scale=cfg.grad_noise_spatial_scale,
                 )
             elif cfg.algorithm == "sgld":
                 scan_body_partial = partial(
@@ -120,6 +174,15 @@ def run(cfg: Config):
                     current_L=cfg.L,
                     current_step_size=current_step_size_val,
                     make_batched_log_p_fn=make_batched_log_p,
+                    grad_noise_type=_noise_type,
+                    grad_noise_scale=_noise_scale,
+                    grad_noise_df=_noise_df,
+                    const_logp_fn=const_logp_fn,
+                    grad_noise_structure=cfg.grad_noise_structure,
+                    grad_conds=_grad_conds,
+                    grad_Q_mat=_grad_Q_mat,
+                    grad_noise_spatial_dim=cfg.grad_noise_spatial_dim,
+                    grad_noise_spatial_scale=cfg.grad_noise_spatial_scale,
                 )
             else:
                 scan_body_partial = partial(
@@ -130,6 +193,15 @@ def run(cfg: Config):
                     current_L=cfg.L,
                     current_step_size=current_step_size_val,
                     make_batched_log_p_fn=make_batched_log_p,
+                    grad_noise_type=_noise_type,
+                    grad_noise_scale=_noise_scale,
+                    grad_noise_df=_noise_df,
+                    const_logp_fn=const_logp_fn,
+                    grad_noise_structure=cfg.grad_noise_structure,
+                    grad_conds=_grad_conds,
+                    grad_Q_mat=_grad_Q_mat,
+                    grad_noise_spatial_dim=cfg.grad_noise_spatial_dim,
+                    grad_noise_spatial_scale=cfg.grad_noise_spatial_scale,
                 )
 
             logdensity_fn_for_mclmc_init = make_batched_log_p(y_data_jnp[: cfg.batch_size], N_TOTAL, cfg.batch_size)

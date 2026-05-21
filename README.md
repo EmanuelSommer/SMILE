@@ -61,10 +61,26 @@ python -m src \
     -s scripts/experiment_configs/uci_benchmarks/uci_search_config.yaml
 ```
 
-To run the **analytical benchmark**, use the following command (and make sure to adjust the absolute path to your local blackjax installation in the config file):
+### Analytical benchmark — required blackjax fork
+
+The analytical benchmark relies on a customized MCLMC kernel (`sqrt_diag_cov=` preconditioning) that is **not part of upstream `blackjax-devs/blackjax`**. Clone the pinned fork as a sibling of this repo and check out the pinned branch before running:
+
+```bash
+git clone https://github.com/reubenharry/blackjax.git ../blackjax
+cd ../blackjax && git checkout uhmc      # pinned commit: ff71d6c
+cd -
+```
+
+The path to the parent directory of the `blackjax/` package is configurable per run via the `blackjax_path` field in the JSON config (or `--blackjax_path` on the CLI); the default is `../blackjax/`.
+
+> **SGHMC integrator note.** Upstream `reubenharry/blackjax@uhmc` ships SGHMC with the Euler-Maruyama integrator from Chen et al. (2014), which is what we report in the paper. A small additional patch — wiring an exact-OU ("exponential integrator") variant in as the SGHMC default and adding an extra `noise_condition=` knob to `blackjax.mclmc` — is available for reference at [`dkn16/blackjax_for_SMILE`](https://github.com/dkn16/blackjax_for_SMILE) (commit `ca8d40d`). It is **not** required to reproduce the numbers in this repository.
+
+To run the **analytical benchmark**:
 ```bash
 python analytical/run_analytical.py --config scripts/analytical/pmclmc/icg_correlated.json
 ```
+
+For the non-Gaussian-noise experiments (Appendix D.2), set `grad_noise_type` (`laplacian`, `student_t`, or `lognormal`), `grad_noise_scale`, optionally `grad_noise_df` (Student-t degrees of freedom or LogNormal sigma), and `grad_noise_structure` (`isotropic` | `anisotropic` | `correlated` | `spatially_varied`) in the config JSON. When `grad_noise_type` is set, mini-batch subsampling is bypassed in favour of a fresh per-step injected noise vector, so the injected non-Gaussian noise is not diluted by the CLT.
 
 ## Results Storage
 

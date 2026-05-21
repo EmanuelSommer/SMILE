@@ -6,6 +6,69 @@ import jax.numpy as jnp
 import numpy as np
 
 
+def _add_gradient_noise(logp_fn, key, dim, noise_type, noise_scale, noise_df,
+                        noise_structure, grad_conds, grad_Q_mat,
+                        spatial_dim=2, spatial_scale=6.5):
+    """Wrap logp_fn to inject structured non-Gaussian noise into its gradient.
+
+    Adds a linear term to logp so that
+        grad_x[noisy_logp] = grad_x[logp] + noise_vec
+    (or with an additional position-dependent factor for spatially_varied).
+
+    The base per-component samples are normalised to unit variance before
+    being multiplied by noise_scale, so the same noise_scale gives identical
+    gradient-noise magnitude across distributions.
+
+    noise_type: "laplacian", "student_t", "lognormal", or None / "none".
+    noise_structure:
+        "isotropic"        - all dims have std = noise_scale
+        "anisotropic"      - per-dim std = noise_scale * grad_conds[d]
+        "correlated"       - anisotropic noise rotated by grad_Q_mat
+        "spatially_varied" - correlated noise scaled by exp(-x[spatial_dim] / spatial_scale)
+    """
+    if noise_type is None or noise_type == "none":
+        return logp_fn
+
+    key1, _ = jax.random.split(key)
+
+    # Generate unit-variance base noise from chosen distribution
+    if noise_type == "laplacian":
+        u = jax.random.uniform(key1, shape=(dim,), minval=1e-7, maxval=1 - 1e-7)
+        base_noise = jnp.sign(u - 0.5) * jnp.log1p(-2.0 * jnp.abs(u - 0.5))
+        # Laplace(0, 1) has variance 2; rescale to unit variance
+        base_noise = base_noise / jnp.sqrt(2.0)
+    elif noise_type == "student_t":
+        raw = jax.random.t(key1, df=noise_df, shape=(dim,))
+        # Student-t(df) has variance df/(df-2) for df>2
+        base_noise = raw / jnp.sqrt(noise_df / (noise_df - 2.0))
+    elif noise_type == "lognormal":
+        # noise_df is reused as the lognormal sigma parameter.
+        sigma_ln = noise_df
+        z = jax.random.normal(key1, shape=(dim,))
+        raw = jnp.exp(sigma_ln * z)
+        mean_ln = jnp.exp(sigma_ln ** 2 / 2.0)
+        std_ln = jnp.sqrt(jnp.expm1(sigma_ln ** 2) * jnp.exp(sigma_ln ** 2))
+        base_noise = (raw - mean_ln) / std_ln
+    else:
+        return logp_fn
+
+    if noise_structure == "anisotropic":
+        noise_vec = noise_scale * grad_conds * base_noise
+    elif noise_structure in ("correlated", "spatially_varied"):
+        noise_vec = noise_scale * grad_Q_mat @ (grad_conds * base_noise)
+    else:  # isotropic
+        noise_vec = noise_scale * base_noise
+
+    if noise_structure == "spatially_varied":
+        def noisy_logp(x):
+            return logp_fn(x) + jnp.dot(noise_vec, x) * jnp.exp(-x[spatial_dim] / spatial_scale)
+        return noisy_logp
+
+    def noisy_logp(x):
+        return logp_fn(x) + jnp.dot(noise_vec, x)
+    return noisy_logp
+
+
 def make_sampling_state(blackjax: Any, logdensity_fn, initial_position, key, algorithm: str = "mclmc"):
     if algorithm == "mclmc":
         return blackjax.mcmc.mclmc.init(position=initial_position, logdensity_fn=logdensity_fn, rng_key=key)
@@ -98,15 +161,40 @@ def get_likelihood_factories(
     return out
 
 
-@partial(jax.jit, static_argnums=(3, 4, 5,6,7))
-def scan_sghmc_body(carry, _, y_full, N_total, current_batch_size, current_L, current_step_size, make_batched_log_p_fn ):
-    current_state, current_key = carry
-    next_key, mc_key, batch_key = jax.random.split(current_key, 3)
-    indices = jax.random.choice(batch_key, N_total, shape=(current_batch_size,), replace=False)
-    #indices = jax.random.permutation(batch_key, N_total)[:current_batch_size]
-    y_batch = y_full[indices, :]
+# const_logp_fn (optional): when not None, skip mini-batch sampling each step and
+# use this pre-baked full-dataset log-density. Useful when gradient noise comes
+# entirely from explicit injection (laplacian / student_t / lognormal) rather
+# than subsampling, removing the CLT-suppressed mini-batch noise.
+#
+# grad_conds, grad_Q_mat: traced JAX arrays for anisotropic / correlated /
+# spatially_varied gradient-noise structure. Ignored when noise_structure is
+# "isotropic" or grad_noise_type is None.
 
-    logp_batch = make_batched_log_p_fn(y_batch, N_total, current_batch_size)
+
+@partial(jax.jit, static_argnums=(3, 4, 5, 6, 7, 8, 11, 12, 15, 16))
+def scan_sghmc_body(carry, _, y_full, N_total, current_batch_size, current_L,
+                    current_step_size, make_batched_log_p_fn,
+                    grad_noise_type=None, grad_noise_scale=1.0, grad_noise_df=3.0,
+                    const_logp_fn=None, grad_noise_structure="isotropic",
+                    grad_conds=None, grad_Q_mat=None,
+                    grad_noise_spatial_dim=2, grad_noise_spatial_scale=6.5):
+    current_state, current_key = carry
+    dim = y_full.shape[1]
+
+    if const_logp_fn is not None:
+        next_key, mc_key, noise_key = jax.random.split(current_key, 3)
+        logp_batch = const_logp_fn
+        y_batch = y_full[:current_batch_size]  # dummy — ignored by grad
+    else:
+        next_key, mc_key, batch_key, noise_key = jax.random.split(current_key, 4)
+        indices = jax.random.choice(batch_key, N_total, shape=(current_batch_size,), replace=False)
+        y_batch = y_full[indices, :]
+        logp_batch = make_batched_log_p_fn(y_batch, N_total, current_batch_size)
+
+    logp_batch = _add_gradient_noise(logp_batch, noise_key, dim,
+                                     grad_noise_type, grad_noise_scale, grad_noise_df,
+                                     grad_noise_structure, grad_conds, grad_Q_mat,
+                                     grad_noise_spatial_dim, grad_noise_spatial_scale)
     grad_logp_batch = lambda x, _: jax.grad(logp_batch)(x)
 
     def kernel_factory(bjx):
@@ -119,15 +207,30 @@ def scan_sghmc_body(carry, _, y_full, N_total, current_batch_size, current_L, cu
     return new_carry, next_state
 
 
-@partial(jax.jit, static_argnums=(3, 4, 5, 6,7))
-def scan_sgld_body(carry, _, y_full, N_total, current_batch_size, current_L, current_step_size, make_batched_log_p_fn):
+@partial(jax.jit, static_argnums=(3, 4, 5, 6, 7, 8, 11, 12, 15, 16))
+def scan_sgld_body(carry, _, y_full, N_total, current_batch_size, current_L,
+                   current_step_size, make_batched_log_p_fn,
+                   grad_noise_type=None, grad_noise_scale=1.0, grad_noise_df=3.0,
+                   const_logp_fn=None, grad_noise_structure="isotropic",
+                   grad_conds=None, grad_Q_mat=None,
+                   grad_noise_spatial_dim=2, grad_noise_spatial_scale=6.5):
     current_state, current_key = carry
-    next_key, mc_key, batch_key = jax.random.split(current_key, 3)
-    indices = jax.random.choice(batch_key, N_total, shape=(current_batch_size,), replace=False)
-    #indices = jax.random.permutation(batch_key, N_total)[:current_batch_size]
-    y_batch = y_full[indices, :]
+    dim = y_full.shape[1]
 
-    logp_batch = make_batched_log_p_fn(y_batch, N_total, current_batch_size)
+    if const_logp_fn is not None:
+        next_key, mc_key, noise_key = jax.random.split(current_key, 3)
+        logp_batch = const_logp_fn
+        y_batch = y_full[:current_batch_size]  # dummy — ignored by grad
+    else:
+        next_key, mc_key, batch_key, noise_key = jax.random.split(current_key, 4)
+        indices = jax.random.choice(batch_key, N_total, shape=(current_batch_size,), replace=False)
+        y_batch = y_full[indices, :]
+        logp_batch = make_batched_log_p_fn(y_batch, N_total, current_batch_size)
+
+    logp_batch = _add_gradient_noise(logp_batch, noise_key, dim,
+                                     grad_noise_type, grad_noise_scale, grad_noise_df,
+                                     grad_noise_structure, grad_conds, grad_Q_mat,
+                                     grad_noise_spatial_dim, grad_noise_spatial_scale)
     grad_logp_batch = lambda x, _: jax.grad(logp_batch)(x)
 
     def kernel_factory(bjx):
@@ -139,16 +242,29 @@ def scan_sgld_body(carry, _, y_full, N_total, current_batch_size, current_L, cur
     return new_carry, next_state
 
 
-@partial(jax.jit, static_argnums=(3, 4, 5, 6, 7, 8))
-def scan_mclmc_body(carry, _, y_full, N_total, current_batch_size, current_L, current_step_size, make_batched_log_p_fn, use_preconditioning=True):
+@partial(jax.jit, static_argnums=(3, 4, 5, 6, 7, 8, 9, 12, 13, 16, 17))
+def scan_mclmc_body(carry, _, y_full, N_total, current_batch_size, current_L,
+                    current_step_size, make_batched_log_p_fn, use_preconditioning=True,
+                    grad_noise_type=None, grad_noise_scale=1.0, grad_noise_df=3.0,
+                    const_logp_fn=None, grad_noise_structure="isotropic",
+                    grad_conds=None, grad_Q_mat=None,
+                    grad_noise_spatial_dim=2, grad_noise_spatial_scale=6.5):
     current_state, current_key, moving_mean, moving_std = carry
-    next_key, mc_key, batch_key = jax.random.split(current_key, 3)
-    #total = y_full.shape[0]
-    indices = jax.random.choice(batch_key, N_total, shape=(current_batch_size,), replace=False)
-    #indices = jax.random.permutation(batch_key, N_total)[:current_batch_size]
-    y_batch = y_full[indices, :]
+    dim = y_full.shape[1]
 
-    logp_batch = make_batched_log_p_fn(y_batch, N_total, current_batch_size)
+    if const_logp_fn is not None:
+        next_key, mc_key, noise_key = jax.random.split(current_key, 3)
+        logp_batch = const_logp_fn
+    else:
+        next_key, mc_key, batch_key, noise_key = jax.random.split(current_key, 4)
+        indices = jax.random.choice(batch_key, N_total, shape=(current_batch_size,), replace=False)
+        y_batch = y_full[indices, :]
+        logp_batch = make_batched_log_p_fn(y_batch, N_total, current_batch_size)
+
+    logp_batch = _add_gradient_noise(logp_batch, noise_key, dim,
+                                     grad_noise_type, grad_noise_scale, grad_noise_df,
+                                     grad_noise_structure, grad_conds, grad_Q_mat,
+                                     grad_noise_spatial_dim, grad_noise_spatial_scale)
 
     current_gradient = jax.grad(logp_batch)
     grad_logp_batch = current_gradient(current_state.position)
