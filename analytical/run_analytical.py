@@ -21,6 +21,13 @@ def parse_args() -> Config:
     parser.add_argument("--L", type=float, default=None)
     parser.add_argument("--seed", type=int, default=None)
     parser.add_argument("--blackjax_path", type=str, default=None)
+    # Explicit non-Gaussian gradient-noise injection (optional)
+    parser.add_argument("--grad_noise_type", type=str,
+                        choices=["laplacian", "student_t", "lognormal", "none"], default=None)
+    parser.add_argument("--grad_noise_scale", type=float, default=None)
+    parser.add_argument("--grad_noise_df", type=float, default=None)
+    parser.add_argument("--grad_noise_structure", type=str,
+                        choices=["isotropic", "anisotropic", "correlated", "spatially_varied"], default=None)
     ns = parser.parse_args()
 
     # Load JSON if provided
@@ -44,6 +51,10 @@ def parse_args() -> Config:
         "L",
         "seed",
         "blackjax_path",
+        "grad_noise_type",
+        "grad_noise_scale",
+        "grad_noise_df",
+        "grad_noise_structure",
     ]:
         val = getattr(ns, key)
         if val is not None:
